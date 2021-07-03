@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'dart:math' as math;
@@ -24,6 +26,8 @@ class MatrixViewState extends State<MatrixView>
   late double tempPosX, tempPosY;
   int value = 1;
   Color color = Colors.black;
+  BitmapCache bitmapCache = BitmapCache();
+  Offset? offset;
 
   MatrixViewState() {
     bitmap = Bitmap.fillWhite(60, 60);
@@ -68,6 +72,8 @@ class MatrixViewState extends State<MatrixView>
               ),
               TextButton(onPressed: () {setState(() {
                 bitmap = Bitmap.fillWhite(60, 60);
+                offset = null;
+                bitmapCache = BitmapCache();
               }); }, child: Text('重置'))
             ],
           ),
@@ -104,6 +110,7 @@ class MatrixViewState extends State<MatrixView>
         onPanStart: this.value == 1
                 ? (detail) {
                     isTouch = true;
+                    offset = null;
                   }
                 : null,
         onPanUpdate: this.value == 1
@@ -116,6 +123,8 @@ class MatrixViewState extends State<MatrixView>
         onPanEnd: this.value == 1
             ? (detail) {
                 isTouch = false;
+                offset = null;
+                bitmapCache.add(bitmap.clone());
               }
             : null,
         onScaleStart: this.value == 2
@@ -160,7 +169,7 @@ class MatrixViewState extends State<MatrixView>
         child: CustomPaint(
           size: Size(size.width / 4 * 3, size.width / 4 * 3),
           painter: MatrixViewPainter(x, y, bitmap, displayCountX, displayCountY,
-              hideCountX, hideCountY, isTouch,color),
+              hideCountX, hideCountY, isTouch,color,this),
         ),
       );
 
@@ -174,6 +183,12 @@ class MatrixViewState extends State<MatrixView>
         Radio(value: Colors.red, groupValue: this.color, onChanged: (value) {setState(() {this.color = value as Color;});}),
         Text('绿'),
         Radio(value: Colors.green, groupValue: this.color, onChanged: (value) {setState(() {this.color = value as Color;});}),
+        OutlinedButton(onPressed: bitmapCache.isHasPrevious() ? () {setState(() {
+            bitmap = bitmapCache.previous()!;
+        }); } : null, child: Icon(Icons.arrow_back,color: bitmapCache.isHasPrevious()? Colors.blue : Colors.grey),),
+        OutlinedButton(onPressed: bitmapCache.isHasNext() ? () {setState(() {
+          bitmap = bitmapCache.next()!;
+        }); } : null, child: Icon(Icons.arrow_forward,color: bitmapCache.isHasNext()? Colors.blue : Colors.grey),)
       ],
   );
 
@@ -204,9 +219,10 @@ class MatrixViewPainter extends CustomPainter {
   int hideCountX, hideCountY;
   bool isTouch;
   Color pixelColor;
+  MatrixViewState matrixViewState;
 
   MatrixViewPainter(this.x, this.y, this.bitmap, this.displayX, this.displayY,
-      this.hideCountX, this.hideCountY, this.isTouch,this.pixelColor) {
+      this.hideCountX, this.hideCountY, this.isTouch,this.pixelColor,this.matrixViewState) {
     mRedPaint = Paint()
       ..isAntiAlias = true
       ..color = Color(0xFF202020)
@@ -258,9 +274,19 @@ class MatrixViewPainter extends CustomPainter {
   void addPixel(Size size) {
     if (x >= size.width || y >= size.height || x <= 0 || y <= 0 || !isTouch)
       return;
+    if(matrixViewState.offset != null){
+      double dis = math.sqrt(math.pow(x - matrixViewState.offset!.dx,2) + math.pow(y - matrixViewState.offset!.dy, 2));
+      int pointNum = (dis ~/ side).abs();
+      for(int i = 0; i < pointNum; i++){
+        int focusX = ((x - matrixViewState.offset!.dx) / (pointNum + 1) * (i + 1) + matrixViewState.offset!.dx) ~/ side;
+        int focusY = ((y - matrixViewState.offset!.dy) / (pointNum + 1) * (i + 1) + matrixViewState.offset!.dy) ~/ side;
+        bitmap.setPixel(focusX + hideCountX, focusY + hideCountY, this.pixelColor);
+      }
+    }
     int focusX = x ~/ side;
     int focusY = y ~/ side;
     bitmap.setPixel(focusX + hideCountX, focusY + hideCountY, this.pixelColor);
+    matrixViewState.offset = Offset(x, y);
   }
 
   @override
@@ -325,6 +351,37 @@ class MatrixPreviewPainter extends CustomPainter {
   bool shouldRepaint(MatrixPreviewPainter oldDelegate) => true;
 }
 
-class TracePath {
-  List<Offset> offsets = [];
+class BitmapCache{
+  List<Bitmap> bitmapList = [];
+  int order = -1;
+
+  void add(Bitmap bitmap){
+    bitmapList.removeRange(order + 1, bitmapList.length);
+    bitmapList.add(bitmap);
+    order++;
+  }
+
+  Bitmap? previous(){
+    if(isHasPrevious()){
+      order--;
+      return bitmapList[order];
+    }
+    return null;
+  }
+
+  Bitmap? next(){
+    if(isHasNext()){
+      order++;
+      return bitmapList[order];
+    }
+    return null;
+  }
+
+  bool isHasPrevious(){
+    return order > 0;
+  }
+
+  bool isHasNext(){
+    return bitmapList.length - 1 > order;
+  }
 }

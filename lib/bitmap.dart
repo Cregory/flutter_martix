@@ -22,4 +22,12 @@ class Bitmap {
   void setPixel(int x,int y,Color color){
     pixels[y * column + x] = color;
   }
+
+  Bitmap clone(){
+    Bitmap bitmap = Bitmap.fillWhite(this.column, this.row);
+    for(int i = 0;i < bitmap.pixels.length;i++){
+      bitmap.pixels[i] = Color(this.pixels[i].value);
+    }
+    return bitmap;
+  }
 }
